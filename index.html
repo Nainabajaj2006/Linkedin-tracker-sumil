@@ -391,18 +391,49 @@
 <div class="modal-overlay" id="post-modal">
   <div class="modal">
     <button class="modal-close" onclick="closeModal('post-modal')">✕</button>
-    <div class="modal-title" id="modal-post-date"></div>
-    <img class="modal-img" id="modal-post-img" src="" alt="" style="display:none" />
-    <div id="modal-post-img-placeholder" style="display:none" class="modal-img" style="height:120px;display:flex;align-items:center;justify-content:center;font-size:40px;"></div>
-    <div class="modal-stat-row">
-      <div class="modal-stat"><div class="modal-stat-val yellow" id="modal-impressions">0</div><div class="modal-stat-label">Impressions</div></div>
-      <div class="modal-stat"><div class="modal-stat-val pink" id="modal-likes">0</div><div class="modal-stat-label">Likes</div></div>
-      <div class="modal-stat"><div class="modal-stat-val purple" id="modal-comments">0</div><div class="modal-stat-label">Comments</div></div>
-      <div class="modal-stat"><div class="modal-stat-val" id="modal-saves">0</div><div class="modal-stat-label">Saves</div></div>
+    <div class="modal-title">Edit Post</div>
+
+    <!-- Pic picker -->
+    <div style="margin-bottom:14px;">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Pic Used</div>
+      <div id="edit-pic-grid" style="display:flex;flex-wrap:wrap;gap:8px;max-height:130px;overflow-y:auto;"></div>
     </div>
-    <div class="modal-text" id="modal-post-text"></div>
-    <div class="modal-actions">
-      <button class="btn btn-danger" id="modal-delete-btn">Delete Post</button>
+
+    <!-- Date -->
+    <div style="margin-bottom:12px;">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Date</div>
+      <input type="date" id="edit-post-date" style="background:#181818;border:1px solid #2a2a2a;border-radius:6px;color:#e8e8e8;font-family:'DM Mono',monospace;font-size:13px;padding:9px 12px;outline:none;width:100%;" />
+    </div>
+
+    <!-- Post text -->
+    <div style="margin-bottom:12px;">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Post Text</div>
+      <textarea id="edit-post-text" style="background:#181818;border:1px solid #2a2a2a;border-radius:6px;color:#e8e8e8;font-family:'DM Mono',monospace;font-size:13px;padding:9px 12px;outline:none;width:100%;min-height:90px;resize:vertical;"></textarea>
+    </div>
+
+    <!-- Stats -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Impressions</div>
+        <input type="number" id="edit-impressions" min="0" style="background:#181818;border:1px solid #2a2a2a;border-radius:6px;color:#f5c518;font-family:'DM Mono',monospace;font-size:13px;padding:9px 12px;outline:none;width:100%;" />
+      </div>
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Likes</div>
+        <input type="number" id="edit-likes" min="0" style="background:#181818;border:1px solid #2a2a2a;border-radius:6px;color:#ff6eb4;font-family:'DM Mono',monospace;font-size:13px;padding:9px 12px;outline:none;width:100%;" />
+      </div>
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Comments</div>
+        <input type="number" id="edit-comments" min="0" style="background:#181818;border:1px solid #2a2a2a;border-radius:6px;color:#b06cff;font-family:'DM Mono',monospace;font-size:13px;padding:9px 12px;outline:none;width:100%;" />
+      </div>
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Saves</div>
+        <input type="number" id="edit-saves" min="0" style="background:#181818;border:1px solid #2a2a2a;border-radius:6px;color:#e8e8e8;font-family:'DM Mono',monospace;font-size:13px;padding:9px 12px;outline:none;width:100%;" />
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-purple" onclick="savePostEdit()" style="flex:1;">Save Changes</button>
+      <button class="btn btn-danger" id="modal-delete-btn">Delete</button>
     </div>
   </div>
 </div>
@@ -493,7 +524,7 @@ function handlePicUpload(e) {
     reader.onload = ev => {
       pics.push({ id: uid(), name: file.name.replace(/\.[^.]+$/, ''), base64: ev.target.result });
       loaded++;
-      if (loaded === files.length) { renderPicGrid(); toast(files.length + ' pic(s) added', 'success'); }
+      if (loaded === files.length) { renderPicGrid(); toast(files.length + ' pic(s) added', 'success'); autoSync(); }
     };
     reader.readAsDataURL(file);
   });
@@ -595,6 +626,7 @@ function logPost() {
   clearPostForm();
   renderPostsList();
   toast('Post logged!', 'success');
+  autoSync();
 }
 
 function clearPostForm() {
@@ -648,19 +680,59 @@ function openPostModal(postId) {
   const post = posts.find(p => p.id === postId);
   if (!post) return;
   currentPostId = postId;
-  const pic = pics.find(p => p.id === post.picId);
-  document.getElementById('modal-post-date').textContent = post.date;
-  document.getElementById('modal-impressions').textContent = post.impressions.toLocaleString();
-  document.getElementById('modal-likes').textContent = post.likes.toLocaleString();
-  document.getElementById('modal-comments').textContent = post.comments.toLocaleString();
-  document.getElementById('modal-saves').textContent = post.saves.toLocaleString();
-  document.getElementById('modal-post-text').textContent = post.text;
-  const img = document.getElementById('modal-post-img');
-  const ph = document.getElementById('modal-post-img-placeholder');
-  if (pic) { img.src = pic.base64; img.style.display = 'block'; ph.style.display = 'none'; }
-  else { img.style.display = 'none'; ph.style.display = 'flex'; ph.textContent = '📝'; }
+
+  // Fill fields
+  document.getElementById('edit-post-date').value    = post.date;
+  document.getElementById('edit-post-text').value    = post.text;
+  document.getElementById('edit-impressions').value  = post.impressions;
+  document.getElementById('edit-likes').value        = post.likes;
+  document.getElementById('edit-comments').value     = post.comments;
+  document.getElementById('edit-saves').value        = post.saves;
+
+  // Pic picker
+  const grid = document.getElementById('edit-pic-grid');
+  if (!pics.length) {
+    grid.innerHTML = '<span style="font-family:DM Mono,monospace;font-size:11px;color:#666;">No pics in library</span>';
+  } else {
+    grid.innerHTML = pics.map(pic => `
+      <div onclick="editSelectPic('${pic.id}')" id="epic-${pic.id}" style="width:56px;height:56px;border-radius:6px;overflow:hidden;border:2px solid ${post.picId===pic.id?'#f5c518':'#2a2a2a'};cursor:pointer;flex-shrink:0;position:relative;transition:border-color .15s;">
+        <img src="${pic.base64}" style="width:100%;height:100%;object-fit:cover;display:block;" />
+        ${post.picId===pic.id?'<div style="position:absolute;top:2px;right:2px;background:#f5c518;border-radius:50%;width:14px;height:14px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#000;font-weight:700;">✓</div>':''}
+      </div>`).join('');
+  }
+
   document.getElementById('modal-delete-btn').onclick = () => deletePost(postId);
   document.getElementById('post-modal').classList.add('open');
+}
+
+function editSelectPic(picId) {
+  const post = posts.find(p => p.id === currentPostId);
+  if (!post) return;
+  post.picId = post.picId === picId ? null : picId;
+  // Re-render picker
+  pics.forEach(pic => {
+    const el = document.getElementById('epic-' + pic.id);
+    if (!el) return;
+    el.style.borderColor = post.picId === pic.id ? '#f5c518' : '#2a2a2a';
+    el.querySelector('div') && el.querySelector('div').remove();
+    if (post.picId === pic.id) {
+      el.insertAdjacentHTML('beforeend', '<div style="position:absolute;top:2px;right:2px;background:#f5c518;border-radius:50%;width:14px;height:14px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#000;font-weight:700;">✓</div>');
+    }
+  });
+}
+
+function savePostEdit() {
+  const post = posts.find(p => p.id === currentPostId);
+  if (!post) return;
+  post.date        = document.getElementById('edit-post-date').value;
+  post.text        = document.getElementById('edit-post-text').value.trim();
+  post.impressions = parseInt(document.getElementById('edit-impressions').value) || 0;
+  post.likes       = parseInt(document.getElementById('edit-likes').value) || 0;
+  post.comments    = parseInt(document.getElementById('edit-comments').value) || 0;
+  post.saves       = parseInt(document.getElementById('edit-saves').value) || 0;
+  closeModal('post-modal');
+  renderPostsList();
+  toast('Post updated ✓', 'success');
 }
 
 function deletePost(postId) {
@@ -729,6 +801,14 @@ function closeModal(id) {
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
 });
+
+// ─── AUTO SYNC ───────────────────────────────────────────────────────────────
+let autoSyncTimer = null;
+function autoSync() {
+  clearTimeout(autoSyncTimer);
+  document.getElementById('sync-status').textContent = 'saving...';
+  autoSyncTimer = setTimeout(() => syncToAppwrite(), 1500);
+}
 
 // ─── APPWRITE SYNC ────────────────────────────────────────────────────────────
 async function appwriteRequest(method, path, body) {
