@@ -825,7 +825,20 @@ async function appwriteRequest(method, path, body) {
   return data;
 }
 
+// Store each pic as its own doc: id = "pic_" + pic.id
+// Store all posts in one doc: id = "posts_main" (posts are text, tiny)
+// Store pic metadata (no base64) separately: id = "picmeta_main"
 
+async function upsertDoc(docId, data) {
+  try {
+    await appwriteRequest('PATCH', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/${docId}`, { data });
+  } catch {
+    await appwriteRequest('POST', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents`, {
+      documentId: docId, data,
+      permissions: ['read("any")', 'write("any")'],
+    });
+  }
+}
 
 async function syncToAppwrite() {
   const btn = document.getElementById('sync-btn');
@@ -834,20 +847,25 @@ async function syncToAppwrite() {
   btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 1s linear infinite"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Syncing…`;
   status.textContent = 'syncing…';
   try {
-    const payload = {
-      pics: JSON.stringify(pics),
+    // 1. Save posts + pic metadata (no base64) in one doc
+    const picMeta = pics.map(p => ({ id: p.id, name: p.name }));
+    await upsertDoc('posts_main', {
       posts: JSON.stringify(posts),
-    };
-    // Try update first, then create
-    try {
-      await appwriteRequest('PATCH', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/${DOC_ID}`, { data: payload });
-    } catch {
-      await appwriteRequest('POST', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents`, {
-        documentId: DOC_ID,
-        data: payload,
-        permissions: ['read("any")', 'write("any")'],
+      pics: JSON.stringify(picMeta),
+    });
+
+    // 2. Save each pic's base64 as its own document
+    for (const pic of pics) {
+      const docId = 'pic_' + pic.id;
+      // Split base64 into two halves if needed (each chunk ~900k chars)
+      const b = pic.base64 || '';
+      const half = Math.ceil(b.length / 2);
+      await upsertDoc(docId, {
+        pics: b.slice(0, half),
+        posts: b.slice(half),
       });
     }
+
     const now = new Date().toLocaleTimeString();
     status.textContent = `synced ${now}`;
     toast('Synced to Appwrite ✓', 'success');
@@ -862,15 +880,30 @@ async function syncToAppwrite() {
 
 async function loadFromAppwrite() {
   try {
-    const doc = await appwriteRequest('GET', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/${DOC_ID}`);
-    if (doc.pics) pics = JSON.parse(doc.pics);
-    if (doc.posts) posts = JSON.parse(doc.posts);
+    // 1. Load posts + pic metadata
+    const mainDoc = await appwriteRequest('GET', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/posts_main`);
+    posts = mainDoc.posts ? JSON.parse(mainDoc.posts) : [];
+    const picMeta = mainDoc.pics ? JSON.parse(mainDoc.pics) : [];
+
+    // 2. Load each pic's base64
+    pics = [];
+    for (const meta of picMeta) {
+      try {
+        const docId = 'pic_' + meta.id;
+        const picDoc = await appwriteRequest('GET', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/${docId}`);
+        const base64 = (picDoc.pics || '') + (picDoc.posts || '');
+        pics.push({ id: meta.id, name: meta.name, base64 });
+      } catch {
+        // pic doc missing, skip
+        pics.push({ id: meta.id, name: meta.name, base64: '' });
+      }
+    }
+
     renderPicGrid();
     renderPostsList();
     document.getElementById('sync-status').textContent = 'loaded from cloud';
-    toast('Data loaded from Appwrite ✓', 'success');
+    toast('Data loaded ✓', 'success');
   } catch (e) {
-    // No data yet – that's fine
     console.log('No existing data:', e.message);
   }
 }
