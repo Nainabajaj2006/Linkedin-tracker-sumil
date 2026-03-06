@@ -463,10 +463,11 @@ const APPWRITE_ENDPOINT = 'https://sgp.cloud.appwrite.io/v1';
 const PROJECT_ID = '69a7448a002fc5074132';
 const DATABASE_ID = '69a74521003636c06877';
 const COLLECTION_ID = 'linkedin_tracker';
-const DOC_ID = 'main_data'; // single document to store all data
+const BUCKET_ID = 'linkedin_pics';
+const CHUNK_SIZE = 950000; // chars per posts chunk doc
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
-let pics = [];   // [{id, name, base64, uses, lastUsed}]
+let pics = [];   // [{id, name, storageId}]  — storageId is the Appwrite Storage file ID
 let posts = [];  // [{id, picId, text, date, likes, comments, impressions, saves}]
 let selectedPicId = null;
 let currentPostId = null;
@@ -475,6 +476,12 @@ let currentPicId = null;
 // ─── UTILS ────────────────────────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2, 10);
 const today = () => new Date().toISOString().split('T')[0];
+
+// Returns the Appwrite Storage preview URL for a pic object
+function getPicUrl(pic) {
+  if (!pic || !pic.storageId) return '';
+  return `${APPWRITE_ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${pic.storageId}/preview?project=${PROJECT_ID}&width=400`;
+}
 
 function daysSince(dateStr) {
   if (!dateStr) return Infinity;
@@ -516,19 +523,37 @@ function showPanel(name) {
 }
 
 // ─── PIC LIBRARY ─────────────────────────────────────────────────────────────
-function handlePicUpload(e) {
+async function handlePicUpload(e) {
   const files = Array.from(e.target.files);
-  let loaded = 0;
-  files.forEach(file => {
-    const reader = new FileReader();
-    reader.onload = ev => {
-      pics.push({ id: uid(), name: file.name.replace(/\.[^.]+$/, ''), base64: ev.target.result });
-      loaded++;
-      if (loaded === files.length) { renderPicGrid(); toast(files.length + ' pic(s) added', 'success'); autoSync(); }
-    };
-    reader.readAsDataURL(file);
-  });
   e.target.value = '';
+  if (!files.length) return;
+  toast(`Uploading ${files.length} pic(s)…`, 'info');
+  let uploaded = 0;
+  for (const file of files) {
+    try {
+      const fileId = uid();
+      const formData = new FormData();
+      formData.append('fileId', fileId);
+      formData.append('file', file);
+      formData.append('permissions[]', 'read("any")');
+      const res = await fetch(`${APPWRITE_ENDPOINT}/storage/buckets/${BUCKET_ID}/files`, {
+        method: 'POST',
+        headers: { 'X-Appwrite-Project': PROJECT_ID },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Upload failed');
+      pics.push({ id: uid(), name: file.name.replace(/\.[^.]+$/, ''), storageId: data.$id });
+      uploaded++;
+    } catch (err) {
+      toast(`Upload failed: ${err.message}`, 'error');
+    }
+  }
+  if (uploaded > 0) {
+    renderPicGrid();
+    toast(`${uploaded} pic(s) uploaded ✓`, 'success');
+    autoSync();
+  }
 }
 
 function renderPicGrid() {
@@ -542,7 +567,7 @@ function renderPicGrid() {
     card.className = 'pic-card';
     card.onclick = () => openPicModal(pic.id);
     card.innerHTML = `
-      <img class="pic-thumb" src="${pic.base64}" alt="${pic.name}" loading="lazy" />
+      <img class="pic-thumb" src="${getPicUrl(pic)}" alt="${pic.name}" loading="lazy" />
       <div class="pic-info">
         <div class="pic-name">${pic.name}</div>
         <div class="pic-meta">
@@ -566,19 +591,31 @@ function openPicModal(picId) {
   if (!pic) return;
   currentPicId = picId;
   document.getElementById('pic-modal-name').textContent = pic.name;
-  document.getElementById('pic-modal-img').src = pic.base64;
+  document.getElementById('pic-modal-img').src = getPicUrl(pic);
   document.getElementById('pic-modal-uses').textContent = picUses(picId);
   document.getElementById('pic-modal-last').textContent = picLastUsed(picId) || '—';
   document.getElementById('pic-modal-delete-btn').onclick = () => deletePic(picId);
   document.getElementById('pic-modal').classList.add('open');
 }
 
-function deletePic(picId) {
+async function deletePic(picId) {
   if (!confirm('Delete this pic? Posts using it will still exist.')) return;
+  const pic = pics.find(p => p.id === picId);
+  if (pic && pic.storageId) {
+    try {
+      await fetch(`${APPWRITE_ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${pic.storageId}`, {
+        method: 'DELETE',
+        headers: { 'X-Appwrite-Project': PROJECT_ID },
+      });
+    } catch (err) {
+      console.warn('Could not delete from storage:', err);
+    }
+  }
   pics = pics.filter(p => p.id !== picId);
   closeModal('pic-modal');
   renderPicGrid();
   toast('Pic deleted', 'info');
+  autoSync();
 }
 
 // ─── POST LOG ─────────────────────────────────────────────────────────────────
@@ -593,7 +630,7 @@ function renderPostForm() {
     const item = document.createElement('div');
     item.className = `pic-select-item${selectedPicId === pic.id ? ' selected' : ''}`;
     item.dataset.id = pic.id;
-    item.innerHTML = `<img src="${pic.base64}" alt="${pic.name}" style="width:100%;height:100%;object-fit:cover;display:block;" /><div class="pic-select-check">✓</div>`;
+    item.innerHTML = `<img src="${getPicUrl(pic)}" alt="${pic.name}" style="width:100%;height:100%;object-fit:cover;display:block;" /><div class="pic-select-check">✓</div>`;
     item.onclick = () => {
       selectedPicId = selectedPicId === pic.id ? null : pic.id;
       renderPostForm();
@@ -655,7 +692,7 @@ function renderPostsList() {
     item.className = 'post-item';
     item.onclick = () => openPostModal(post.id);
     const thumbHtml = pic
-      ? `<img class="post-thumb" src="${pic.base64}" alt="" />`
+      ? `<img class="post-thumb" src="${getPicUrl(pic)}" alt="" />`
       : `<div class="post-thumb-placeholder">📝</div>`;
     item.innerHTML = `
       ${thumbHtml}
@@ -696,7 +733,7 @@ function openPostModal(postId) {
   } else {
     grid.innerHTML = pics.map(pic => `
       <div onclick="editSelectPic('${pic.id}')" id="epic-${pic.id}" style="width:56px;height:56px;border-radius:6px;overflow:hidden;border:2px solid ${post.picId===pic.id?'#f5c518':'#2a2a2a'};cursor:pointer;flex-shrink:0;position:relative;transition:border-color .15s;">
-        <img src="${pic.base64}" style="width:100%;height:100%;object-fit:cover;display:block;" />
+        <img src="${getPicUrl(pic)}" style="width:100%;height:100%;object-fit:cover;display:block;" />
         ${post.picId===pic.id?'<div style="position:absolute;top:2px;right:2px;background:#f5c518;border-radius:50%;width:14px;height:14px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#000;font-weight:700;">✓</div>':''}
       </div>`).join('');
   }
@@ -765,7 +802,7 @@ function renderAnalytics() {
   else {
     usage.innerHTML = picStats.map(({pic, uses}) => `
       <div class="pic-usage-row">
-        <img class="pic-usage-thumb" src="${pic.base64}" alt="" />
+        <img class="pic-usage-thumb" src="${getPicUrl(pic)}" alt="" />
         <div class="pic-usage-name">${pic.name}</div>
         <div class="pic-usage-bar-wrap"><div class="pic-usage-bar" style="width:${Math.round(uses/maxUses*100)}%"></div></div>
         <div class="pic-usage-count">${uses}</div>
@@ -780,7 +817,7 @@ function renderAnalytics() {
     const bPic = pics.find(p => p.id === best.picId);
     bestBlock.innerHTML = `
       <div style="display:flex;gap:12px;align-items:start;margin-bottom:12px;">
-        ${bPic ? `<img style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;" src="${bPic.base64}" />` : '<div style="width:56px;height:56px;border-radius:6px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">📝</div>'}
+      ${bPic ? `<img style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;" src="${getPicUrl(bPic)}" />` : '<div style="width:56px;height:56px;border-radius:6px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">📝</div>'}
         <div>
           <div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted);margin-bottom:4px;">${best.date}</div>
           <div style="font-size:13px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${best.text}</div>
@@ -825,10 +862,6 @@ async function appwriteRequest(method, path, body) {
   return data;
 }
 
-// Store each pic as its own doc: id = "pic_" + pic.id
-// Store all posts in one doc: id = "posts_main" (posts are text, tiny)
-// Store pic metadata (no base64) separately: id = "picmeta_main"
-
 async function upsertDoc(docId, data) {
   try {
     await appwriteRequest('PATCH', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/${docId}`, { data });
@@ -840,6 +873,58 @@ async function upsertDoc(docId, data) {
   }
 }
 
+async function deleteDocIfExists(docId) {
+  try {
+    await appwriteRequest('DELETE', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/${docId}`);
+  } catch { /* ignore — doc may not exist */ }
+}
+
+// Split posts JSON into chunks and save; clean up leftover chunk docs
+async function savePostsChunked() {
+  const picMeta = pics.map(p => ({ id: p.id, name: p.name, storageId: p.storageId }));
+  const postsJson = JSON.stringify(posts);
+
+  if (postsJson.length <= CHUNK_SIZE) {
+    // Single doc: posts_main
+    await upsertDoc('posts_main', {
+      posts: postsJson,
+      pics: JSON.stringify(picMeta),
+    });
+    // Clean up any old chunk docs
+    let i = 0;
+    while (true) {
+      try {
+        await appwriteRequest('GET', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/posts_main_${i}`);
+        await deleteDocIfExists(`posts_main_${i}`);
+        i++;
+      } catch { break; }
+    }
+  } else {
+    // Delete posts_main (we'll use numbered chunks instead)
+    await deleteDocIfExists('posts_main');
+    // Split into chunks
+    const chunks = [];
+    for (let i = 0; i < postsJson.length; i += CHUNK_SIZE) {
+      chunks.push(postsJson.slice(i, i + CHUNK_SIZE));
+    }
+    for (let i = 0; i < chunks.length; i++) {
+      const data = { posts: chunks[i], pics: '' };
+      // Store picMeta only in the first chunk
+      if (i === 0) data.pics = JSON.stringify(picMeta);
+      await upsertDoc(`posts_main_${i}`, data);
+    }
+    // Clean up any extra old chunk docs beyond current count
+    let i = chunks.length;
+    while (true) {
+      try {
+        await appwriteRequest('GET', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/posts_main_${i}`);
+        await deleteDocIfExists(`posts_main_${i}`);
+        i++;
+      } catch { break; }
+    }
+  }
+}
+
 async function syncToAppwrite() {
   const btn = document.getElementById('sync-btn');
   const status = document.getElementById('sync-status');
@@ -847,24 +932,8 @@ async function syncToAppwrite() {
   btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 1s linear infinite"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Syncing…`;
   status.textContent = 'syncing…';
   try {
-    // 1. Save posts + pic metadata (no base64) in one doc
-    const picMeta = pics.map(p => ({ id: p.id, name: p.name }));
-    await upsertDoc('posts_main', {
-      posts: JSON.stringify(posts),
-      pics: JSON.stringify(picMeta),
-    });
-
-    // 2. Save each pic's base64 as its own document
-    for (const pic of pics) {
-      const docId = 'pic_' + pic.id;
-      // Split base64 into two halves if needed (each chunk ~900k chars)
-      const b = pic.base64 || '';
-      const half = Math.ceil(b.length / 2);
-      await upsertDoc(docId, {
-        pics: b.slice(0, half),
-        posts: b.slice(half),
-      });
-    }
+    // Save posts (chunked if needed) + pic metadata (id, name, storageId only — no base64)
+    await savePostsChunked();
 
     const now = new Date().toLocaleTimeString();
     status.textContent = `synced ${now}`;
@@ -880,31 +949,43 @@ async function syncToAppwrite() {
 
 async function loadFromAppwrite() {
   try {
-    // 1. Load posts + pic metadata
-    const mainDoc = await appwriteRequest('GET', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/posts_main`);
-    posts = mainDoc.posts ? JSON.parse(mainDoc.posts) : [];
-    const picMeta = mainDoc.pics ? JSON.parse(mainDoc.pics) : [];
+    let postsJson = '';
+    let picMeta = [];
 
-    // 2. Load each pic's base64
-    pics = [];
-    for (const meta of picMeta) {
-      try {
-        const docId = 'pic_' + meta.id;
-        const picDoc = await appwriteRequest('GET', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/${docId}`);
-        const base64 = (picDoc.pics || '') + (picDoc.posts || '');
-        pics.push({ id: meta.id, name: meta.name, base64 });
-      } catch {
-        // pic doc missing, skip
-        pics.push({ id: meta.id, name: meta.name, base64: '' });
+    // Try loading posts_main first (single-doc mode)
+    let usedChunks = false;
+    try {
+      const mainDoc = await appwriteRequest('GET', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/posts_main`);
+      postsJson = mainDoc.posts || '';
+      picMeta = mainDoc.pics ? JSON.parse(mainDoc.pics) : [];
+    } catch {
+      // Fall back to chunked mode: posts_main_0, posts_main_1, ...
+      usedChunks = true;
+      let i = 0;
+      while (true) {
+        try {
+          const chunk = await appwriteRequest('GET', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/posts_main_${i}`);
+          postsJson += chunk.posts || '';
+          if (i === 0 && chunk.pics) picMeta = JSON.parse(chunk.pics);
+          i++;
+        } catch { break; }
+      }
+      if (!postsJson && !picMeta.length) {
+        console.log('No existing data found.');
+        return;
       }
     }
+
+    posts = postsJson ? JSON.parse(postsJson) : [];
+    // Rebuild pics array from metadata — images are served directly from Storage
+    pics = picMeta.map(m => ({ id: m.id, name: m.name, storageId: m.storageId || '' }));
 
     renderPicGrid();
     renderPostsList();
     document.getElementById('sync-status').textContent = 'loaded from cloud';
     toast('Data loaded ✓', 'success');
   } catch (e) {
-    console.log('No existing data:', e.message);
+    console.log('Load error:', e.message);
   }
 }
 
