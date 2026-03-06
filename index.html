@@ -504,16 +504,16 @@ function compressImage(file, maxW = 800, quality = 0.75) {
   });
 }
 
-function handlePicUpload(e) {
+async function handlePicUpload(e) {
   const files = Array.from(e.target.files);
-  toast(\`Compressing \${files.length} pic(s)\u2026\`, 'info');
-  let loaded = 0;
-  files.forEach(async file => {
+  if (!files.length) return;
+  toast('Compressing ' + files.length + ' pic(s)...', 'info');
+  for (const file of files) {
     const base64 = await compressImage(file);
     pics.push({ id: uid(), name: file.name.replace(/\.[^.]+$/, ''), base64 });
-    loaded++;
-    if (loaded === files.length) { renderPicGrid(); toast(\`\${files.length} pic(s) added & compressed ✓\`, 'success'); }
-  });
+  }
+  renderPicGrid();
+  toast(files.length + ' pic(s) added & compressed', 'success');
   e.target.value = '';
 }
 
