@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LinkedIn Content Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #080808;
+    --bg2: #111111;
+    --bg3: #181818;
+    --bg4: #222222;
+    --border: #2a2a2a;
+    --yellow: #f5c518;
+    --pink: #ff6eb4;
+    --purple: #b06cff;
+    --text: #e8e8e8;
+    --muted: #666;
+    --green: #4ade80;
+    --red: #f87171;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Layout */
+  .app { display: grid; grid-template-rows: auto 1fr; min-height: 100vh; }
+
+  /* Header */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 32px; border-bottom: 1px solid var(--border);
+    background: var(--bg); position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 28px; height: 28px; background: var(--yellow); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; color: #000; }
+  .logo-text { font-size: 15px; font-weight: 700; letter-spacing: 0.02em; }
+  .logo-text span { color: var(--yellow); }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .sync-btn {
+    display: flex; align-items: center; gap: 8px; background: var(--yellow);
+    color: #000; border: none; padding: 8px 18px; border-radius: 6px;
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px;
+    cursor: pointer; transition: all 0.2s; letter-spacing: 0.03em;
+  }
+  .sync-btn:hover { background: #ffd740; transform: translateY(-1px); }
+  .sync-btn:active { transform: translateY(0); }
+  .sync-btn.syncing { opacity: 0.7; pointer-events: none; }
+  .sync-status { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+
+  /* Nav */
+  nav {
+    display: flex; gap: 4px; padding: 16px 32px 0;
+    border-bottom: 1px solid var(--border); background: var(--bg);
+  }
+  .nav-tab {
+    padding: 10px 20px; font-family: 'Syne', sans-serif; font-size: 13px;
+    font-weight: 600; background: none; border: none; color: var(--muted);
+    cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;
+    letter-spacing: 0.03em; margin-bottom: -1px;
+  }
+  .nav-tab:hover { color: var(--text); }
+  .nav-tab.active { color: var(--yellow); border-bottom-color: var(--yellow); }
+
+  /* Main */
+  main { padding: 32px; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+  /* Panels */
+  .panel { display: none; }
+  .panel.active { display: block; animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Section headers */
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .section-title { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
+  .section-title span { color: var(--purple); }
+
+  /* Buttons */
+  .btn {
+    padding: 9px 18px; border-radius: 6px; border: none; font-family: 'Syne', sans-serif;
+    font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; letter-spacing: 0.02em;
+  }
+  .btn-primary { background: var(--purple); color: #fff; }
+  .btn-primary:hover { background: #c47fff; }
+  .btn-pink { background: var(--pink); color: #fff; }
+  .btn-pink:hover { background: #ff85c0; }
+  .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .btn-outline:hover { border-color: var(--purple); color: var(--purple); }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-danger:hover { background: #f99; }
+
+  /* Cards */
+  .card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 20px;
+  }
+
+  /* PIC LIBRARY */
+  .pic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+  .pic-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden; transition: all 0.2s; cursor: pointer; position: relative;
+  }
+  .pic-card:hover { border-color: var(--purple); transform: translateY(-2px); }
+  .pic-thumb { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--bg3); }
+  .pic-thumb-placeholder { width: 100%; aspect-ratio: 1; background: var(--bg3); display: flex;
+    align-items: center; justify-content: center; font-size: 32px; }
+  .pic-info { padding: 12px; }
+  .pic-name { font-size: 12px; font-weight: 600; margin-bottom: 6px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .pic-meta { display: flex; align-items: center; justify-content: space-between; }
+  .pic-uses { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+  .pic-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .pic-status.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .pic-status.yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+  .pic-status.red { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .pic-last { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .pic-add {
+    background: var(--bg2); border: 1px dashed var(--border); border-radius: 10px;
+    aspect-ratio: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; cursor: pointer; transition: all 0.2s; gap: 8px;
+  }
+  .pic-add:hover { border-color: var(--purple); background: rgba(176,108,255,0.05); }
+  .pic-add-icon { font-size: 28px; color: var(--muted); }
+  .pic-add-text { font-size: 12px; color: var(--muted); font-weight: 600; }
+  #pic-upload-input { display: none; }
+
+  /* POST LOG */
+  .post-form { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 24px; margin-bottom: 28px; }
+  .form-title { font-size: 14px; font-weight: 700; margin-bottom: 18px; color: var(--pink); letter-spacing: 0.05em; text-transform: uppercase; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-full { grid-column: 1 / -1; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-family: 'DM Mono', monospace; }
+  .form-input, .form-select, .form-textarea {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-family: 'DM Mono', monospace; font-size: 13px; padding: 10px 12px;
+    transition: border-color 0.2s; outline: none; width: 100%;
+  }
+  .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--purple); }
+  .form-textarea { resize: vertical; min-height: 80px; }
+  .form-select option { background: var(--bg3); }
+  .pic-select-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 8px; max-height: 200px; overflow-y: auto; }
+  .pic-select-item { position: relative; cursor: pointer; border-radius: 6px; overflow: hidden;
+    border: 2px solid transparent; transition: all 0.15s; aspect-ratio: 1; }
+  .pic-select-item:hover { border-color: var(--purple); }
+  .pic-select-item.selected { border-color: var(--yellow); }
+  .pic-select-item img, .pic-select-item .pic-select-placeholder {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  .pic-select-placeholder { background: var(--bg4); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .pic-select-check { position: absolute; top: 3px; right: 3px; background: var(--yellow);
+    border-radius: 50%; width: 16px; height: 16px; display: none; align-items: center;
+    justify-content: center; font-size: 9px; color: #000; font-weight: 700; }
+  .pic-select-item.selected .pic-select-check { display: flex; }
+
+  /* Posts list */
+  .posts-list { display: flex; flex-direction: column; gap: 12px; }
+  .post-item {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 20px; cursor: pointer; transition: all 0.2s; display: grid;
+    grid-template-columns: 60px 1fr auto; gap: 16px; align-items: start;
+  }
+  .post-item:hover { border-color: var(--pink); transform: translateX(3px); }
+  .post-thumb { width: 60px; height: 60px; border-radius: 6px; object-fit: cover; background: var(--bg3); flex-shrink: 0; }
+  .post-thumb-placeholder { width: 60px; height: 60px; border-radius: 6px; background: var(--bg3);
+    display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+  .post-body { min-width: 0; }
+  .post-date { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .post-text { font-size: 13px; line-height: 1.5; color: var(--text); display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .post-stats { display: flex; gap: 12px; margin-top: 8px; }
+  .post-stat { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+  .post-stat .stat-val { color: var(--text); font-weight: 500; }
+  .post-impressions { font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; color: var(--yellow); text-align: right; white-space: nowrap; }
+  .post-impressions-label { font-size: 10px; color: var(--muted); text-align: right; }
+
+  /* ANALYTICS */
+  .analytics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .stat-card-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .stat-card-value { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+  .stat-card-value.yellow { color: var(--yellow); }
+  .stat-card-value.pink { color: var(--pink); }
+  .stat-card-value.purple { color: var(--purple); }
+  .stat-card-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .analytics-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .analytics-block { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .analytics-block-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; font-family: 'DM Mono', monospace; }
+  .pic-usage-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .pic-usage-thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: var(--bg3); flex-shrink: 0; }
+  .pic-usage-placeholder { width: 40px; height: 40px; border-radius: 6px; background: var(--bg3);
+    display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+  .pic-usage-name { font-size: 12px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pic-usage-bar-wrap { flex: 2; height: 6px; background: var(--bg4); border-radius: 3px; overflow: hidden; }
+  .pic-usage-bar { height: 100%; border-radius: 3px; background: var(--purple); transition: width 0.4s; }
+  .pic-usage-count { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); min-width: 24px; text-align: right; }
+
+  /* MODAL */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 200;
+    display: none; align-items: center; justify-content: center; padding: 24px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 14px;
+    width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; padding: 28px;
+    position: relative;
+  }
+  .modal-close {
+    position: absolute; top: 16px; right: 16px; background: var(--bg4); border: none;
+    color: var(--muted); font-size: 18px; cursor: pointer; width: 32px; height: 32px;
+    border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+  }
+  .modal-close:hover { color: var(--text); background: var(--border); }
+  .modal-title { font-size: 18px; font-weight: 800; margin-bottom: 20px; }
+  .modal-img { width: 100%; max-height: 300px; object-fit: contain; border-radius: 8px;
+    background: var(--bg3); margin-bottom: 16px; }
+  .modal-stat-row { display: flex; gap: 12px; margin-bottom: 16px; }
+  .modal-stat { flex: 1; background: var(--bg3); border-radius: 8px; padding: 12px; text-align: center; }
+  .modal-stat-val { font-size: 20px; font-weight: 800; }
+  .modal-stat-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+  .modal-text { font-size: 13px; line-height: 1.6; color: var(--text); background: var(--bg3);
+    border-radius: 8px; padding: 14px; font-family: 'DM Mono', monospace; white-space: pre-wrap; }
+  .modal-date { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; background: var(--bg3);
+    border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px;
+    font-family: 'DM Mono', monospace; font-size: 12px; z-index: 300;
+    transform: translateY(80px); opacity: 0; transition: all 0.3s; pointer-events: none;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: var(--green); color: var(--green); }
+  .toast.error { border-color: var(--red); color: var(--red); }
+  .toast.info { border-color: var(--yellow); color: var(--yellow); }
+
+  /* Legend */
+  .legend { display: flex; gap: 16px; align-items: center; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-text { font-size: 14px; }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    header { padding: 14px 16px; }
+    nav { padding: 12px 16px 0; }
+    main { padding: 20px 16px; }
+    .analytics-grid { grid-template-columns: 1fr 1fr; }
+    .analytics-row { grid-template-columns: 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
+    .post-item { grid-template-columns: 50px 1fr; }
+    .post-impressions, .post-impressions-label { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">Li</div>
+      <div class="logo-text">Content<span>Tracker</span></div>
+    </div>
+    <div class="header-right">
+      <span class="sync-status" id="sync-status">not synced</span>
+      <button class="sync-btn" onclick="syncToAppwrite()" id="sync-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+        Save & Sync
+      </button>
+    </div>
+  </header>
+
+  <nav>
+    <button class="nav-tab active" onclick="showPanel('pics')">📸 Pic Library</button>
+    <button class="nav-tab" onclick="showPanel('posts')">📝 Post Log</button>
+    <button class="nav-tab" onclick="showPanel('analytics')">📊 Analytics</button>
+  </nav>
+
+  <main>
+    <!-- PIC LIBRARY -->
+    <div class="panel active" id="panel-pics">
+      <div class="section-header">
+        <div class="section-title">Pic <span>Library</span></div>
+        <div style="display:flex;align-items:center;gap:16px;">
+          <div class="legend">
+            <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Safe (2w+)</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--yellow)"></div>Recent</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>This week</div>
+          </div>
+        </div>
+      </div>
+      <div class="pic-grid" id="pic-grid">
+        <div class="pic-add" onclick="document.getElementById('pic-upload-input').click()">
+          <div class="pic-add-icon">+</div>
+          <div class="pic-add-text">Add Photo</div>
+        </div>
+      </div>
+      <input type="file" id="pic-upload-input" accept="image/*" multiple onchange="handlePicUpload(event)" />
+    </div>
+
+    <!-- POST LOG -->
+    <div class="panel" id="panel-posts">
+      <div class="post-form">
+        <div class="form-title">— Log a New Post</div>
+        <div style="margin-bottom:14px;">
+          <div class="form-label" style="margin-bottom:8px;">Select Pic Used</div>
+          <div class="pic-select-grid" id="pic-select-grid">
+            <div style="color:var(--muted);font-size:12px;font-family:'DM Mono',monospace;">No pics yet. Add pics in the library.</div>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group form-full">
+            <label class="form-label">Post Text</label>
+            <textarea class="form-textarea" id="post-text" placeholder="Write your post content..."></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date Posted</label>
+            <input type="date" class="form-input" id="post-date" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Impressions</label>
+            <input type="number" class="form-input" id="post-impressions" placeholder="0" min="0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Likes</label>
+            <input type="number" class="form-input" id="post-likes" placeholder="0" min="0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Comments</label>
+            <input type="number" class="form-input" id="post-comments" placeholder="0" min="0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Saves</label>
+            <input type="number" class="form-input" id="post-saves" placeholder="0" min="0" />
+          </div>
+        </div>
+        <div style="margin-top:18px;display:flex;gap:10px;">
+          <button class="btn btn-pink" onclick="logPost()">Log Post</button>
+          <button class="btn btn-outline" onclick="clearPostForm()">Clear</button>
+        </div>
+      </div>
+
+      <div class="section-header">
+        <div class="section-title">All <span>Posts</span></div>
+        <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);" id="post-count">0 posts</span>
+      </div>
+      <div class="posts-list" id="posts-list">
+        <div class="empty"><div class="empty-icon">📭</div><div class="empty-text">No posts logged yet.</div></div>
+      </div>
+    </div>
+
+    <!-- ANALYTICS -->
+    <div class="panel" id="panel-analytics">
+      <div class="section-title" style="margin-bottom:24px;">Analytics <span style="color:var(--yellow)">Overview</span></div>
+      <div class="analytics-grid" id="analytics-stats">
+        <div class="stat-card"><div class="stat-card-label">Total Posts</div><div class="stat-card-value yellow" id="a-total">0</div></div>
+        <div class="stat-card"><div class="stat-card-label">Avg Impressions</div><div class="stat-card-value pink" id="a-avg-imp">0</div></div>
+        <div class="stat-card"><div class="stat-card-label">Avg Likes</div><div class="stat-card-value purple" id="a-avg-likes">0</div></div>
+        <div class="stat-card"><div class="stat-card-label">Avg Comments</div><div class="stat-card-value yellow" id="a-avg-comments">0</div></div>
+        <div class="stat-card"><div class="stat-card-label">Total Impressions</div><div class="stat-card-value pink" id="a-total-imp">0</div></div>
+        <div class="stat-card"><div class="stat-card-label">Total Likes</div><div class="stat-card-value purple" id="a-total-likes">0</div></div>
+      </div>
+      <div class="analytics-row">
+        <div class="analytics-block">
+          <div class="analytics-block-title">📸 Pic Usage</div>
+          <div id="a-pic-usage"><div class="empty" style="padding:20px 0;"><div class="empty-text">No data yet.</div></div></div>
+        </div>
+        <div class="analytics-block">
+          <div class="analytics-block-title">🏆 Best Performing Post</div>
+          <div id="a-best-post"><div class="empty" style="padding:20px 0;"><div class="empty-text">No posts yet.</div></div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- POST MODAL -->
+<div class="modal-overlay" id="post-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('post-modal')">✕</button>
+    <div class="modal-title">Edit Post</div>
+
+    <!-- Pic picker -->
+    <div style="margin-bottom:14px;">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Pic Used</div>
+      <div id="edit-pic-grid" style="display:flex;flex-wrap:wrap;gap:8px;max-height:130px;overflow-y:auto;"></div>
+    </div>
+
+    <!-- Date -->
+    <div style="margin-bottom:12px;">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Date</div>
+      <input type="date" id="edit-post-date" style="background:#181818;border:1px solid #2a2a2a;border-radius:6px;color:#e8e8e8;font-family:'DM Mono',monospace;font-size:13px;padding:9px 12px;outline:none;width:100%;" />
+    </div>
+
+    <!-- Post text -->
+    <div style="margin-bottom:12px;">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Post Text</div>
+      <textarea id="edit-post-text" style="background:#181818;border:1px solid #2a2a2a;border-radius:6px;color:#e8e8e8;font-family:'DM Mono',monospace;font-size:13px;padding:9px 12px;outline:none;width:100%;min-height:90px;resize:vertical;"></textarea>
+    </div>
+
+    <!-- Stats -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Impressions</div>
+        <input type="number" id="edit-impressions" min="0" style="background:#181818;border:1px solid #2a2a2a;border-radius:6px;color:#f5c518;font-family:'DM Mono',monospace;font-size:13px;padding:9px 12px;outline:none;width:100%;" />
+      </div>
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Likes</div>
+        <input type="number" id="edit-likes" min="0" style="background:#181818;border:1px solid #2a2a2a;border-radius:6px;color:#ff6eb4;font-family:'DM Mono',monospace;font-size:13px;padding:9px 12px;outline:none;width:100%;" />
+      </div>
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Comments</div>
+        <input type="number" id="edit-comments" min="0" style="background:#181818;border:1px solid #2a2a2a;border-radius:6px;color:#b06cff;font-family:'DM Mono',monospace;font-size:13px;padding:9px 12px;outline:none;width:100%;" />
+      </div>
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Saves</div>
+        <input type="number" id="edit-saves" min="0" style="background:#181818;border:1px solid #2a2a2a;border-radius:6px;color:#e8e8e8;font-family:'DM Mono',monospace;font-size:13px;padding:9px 12px;outline:none;width:100%;" />
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-purple" onclick="savePostEdit()" style="flex:1;">Save Changes</button>
+      <button class="btn btn-danger" id="modal-delete-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- PIC MODAL -->
+<div class="modal-overlay" id="pic-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('pic-modal')">✕</button>
+    <div class="modal-title" id="pic-modal-name"></div>
+    <img class="modal-img" id="pic-modal-img" src="" alt="" />
+    <div class="modal-stat-row">
+      <div class="modal-stat"><div class="modal-stat-val yellow" id="pic-modal-uses">0</div><div class="modal-stat-label">Times Used</div></div>
+      <div class="modal-stat"><div class="modal-stat-val" id="pic-modal-last">—</div><div class="modal-stat-label">Last Used</div></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="pic-modal-delete-btn">Delete Pic</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const APPWRITE_ENDPOINT = 'https://cloud.appwrite.io/v1';
+const PROJECT_ID = '69a7448a002fc5074132';
+const DATABASE_ID = '69a74521003636c06877';
+const COLLECTION_ID = 'linkedin_tracker';
+const DOC_ID = 'main_data'; // single document to store all data
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let pics = [];   // [{id, name, base64, uses, lastUsed}]
+let posts = [];  // [{id, picId, text, date, likes, comments, impressions, saves}]
+let selectedPicId = null;
+let currentPostId = null;
+let currentPicId = null;
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+const uid = () => Math.random().toString(36).slice(2, 10);
+const today = () => new Date().toISOString().split('T')[0];
+
+function daysSince(dateStr) {
+  if (!dateStr) return Infinity;
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+}
+function picColor(picId) {
+  const picPosts = posts.filter(p => p.picId === picId);
+  if (!picPosts.length) return 'green';
+  const latest = picPosts.map(p => p.date).sort().reverse()[0];
+  const d = daysSince(latest);
+  if (d < 7) return 'red';
+  if (d < 14) return 'yellow';
+  return 'green';
+}
+function picUses(picId) {
+  return posts.filter(p => p.picId === picId).length;
+}
+function picLastUsed(picId) {
+  const pp = posts.filter(p => p.picId === picId);
+  if (!pp.length) return null;
+  return pp.map(p => p.date).sort().reverse()[0];
+}
+
+function toast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  setTimeout(() => t.className = 'toast', 2800);
+}
+
+// ─── PANELS ───────────────────────────────────────────────────────────────────
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`panel-${name}`).classList.add('active');
+  document.querySelectorAll('.nav-tab')[['pics','posts','analytics'].indexOf(name)].classList.add('active');
+  if (name === 'posts') renderPostForm();
+  if (name === 'analytics') renderAnalytics();
+}
+
+// ─── PIC LIBRARY ─────────────────────────────────────────────────────────────
+function handlePicUpload(e) {
+  const files = Array.from(e.target.files);
+  let loaded = 0;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      pics.push({ id: uid(), name: file.name.replace(/\.[^.]+$/, ''), base64: ev.target.result });
+      loaded++;
+      if (loaded === files.length) { renderPicGrid(); toast(files.length + ' pic(s) added', 'success'); autoSync(); }
+    };
+    reader.readAsDataURL(file);
+  });
+  e.target.value = '';
+}
+
+function renderPicGrid() {
+  const grid = document.getElementById('pic-grid');
+  grid.innerHTML = '';
+  pics.forEach(pic => {
+    const uses = picUses(pic.id);
+    const last = picLastUsed(pic.id);
+    const color = picColor(pic.id);
+    const card = document.createElement('div');
+    card.className = 'pic-card';
+    card.onclick = () => openPicModal(pic.id);
+    card.innerHTML = `
+      <img class="pic-thumb" src="${pic.base64}" alt="${pic.name}" loading="lazy" />
+      <div class="pic-info">
+        <div class="pic-name">${pic.name}</div>
+        <div class="pic-meta">
+          <span class="pic-uses">${uses}× used</span>
+          <span class="pic-status ${color}"></span>
+        </div>
+        <div class="pic-last">${last ? `Last: ${last}` : 'Never used'}</div>
+      </div>`;
+    grid.appendChild(card);
+  });
+  // Add button
+  const add = document.createElement('div');
+  add.className = 'pic-add';
+  add.onclick = () => document.getElementById('pic-upload-input').click();
+  add.innerHTML = `<div class="pic-add-icon">+</div><div class="pic-add-text">Add Photo</div>`;
+  grid.appendChild(add);
+}
+
+function openPicModal(picId) {
+  const pic = pics.find(p => p.id === picId);
+  if (!pic) return;
+  currentPicId = picId;
+  document.getElementById('pic-modal-name').textContent = pic.name;
+  document.getElementById('pic-modal-img').src = pic.base64;
+  document.getElementById('pic-modal-uses').textContent = picUses(picId);
+  document.getElementById('pic-modal-last').textContent = picLastUsed(picId) || '—';
+  document.getElementById('pic-modal-delete-btn').onclick = () => deletePic(picId);
+  document.getElementById('pic-modal').classList.add('open');
+}
+
+function deletePic(picId) {
+  if (!confirm('Delete this pic? Posts using it will still exist.')) return;
+  pics = pics.filter(p => p.id !== picId);
+  closeModal('pic-modal');
+  renderPicGrid();
+  toast('Pic deleted', 'info');
+}
+
+// ─── POST LOG ─────────────────────────────────────────────────────────────────
+function renderPostForm() {
+  const grid = document.getElementById('pic-select-grid');
+  if (!pics.length) {
+    grid.innerHTML = '<div style="color:var(--muted);font-size:12px;font-family:\'DM Mono\',monospace;padding:8px 0;">No pics yet. Add pics in the library.</div>';
+    return;
+  }
+  grid.innerHTML = '';
+  pics.forEach(pic => {
+    const item = document.createElement('div');
+    item.className = `pic-select-item${selectedPicId === pic.id ? ' selected' : ''}`;
+    item.dataset.id = pic.id;
+    item.innerHTML = `<img src="${pic.base64}" alt="${pic.name}" style="width:100%;height:100%;object-fit:cover;display:block;" /><div class="pic-select-check">✓</div>`;
+    item.onclick = () => {
+      selectedPicId = selectedPicId === pic.id ? null : pic.id;
+      renderPostForm();
+    };
+    grid.appendChild(item);
+  });
+  // Set today's date if empty
+  if (!document.getElementById('post-date').value) {
+    document.getElementById('post-date').value = today();
+  }
+  renderPostsList();
+}
+
+function logPost() {
+  const text = document.getElementById('post-text').value.trim();
+  const date = document.getElementById('post-date').value;
+  if (!text) { toast('Write some post text!', 'error'); return; }
+  if (!date) { toast('Pick a date!', 'error'); return; }
+  const post = {
+    id: uid(),
+    picId: selectedPicId || null,
+    text,
+    date,
+    impressions: parseInt(document.getElementById('post-impressions').value) || 0,
+    likes: parseInt(document.getElementById('post-likes').value) || 0,
+    comments: parseInt(document.getElementById('post-comments').value) || 0,
+    saves: parseInt(document.getElementById('post-saves').value) || 0,
+  };
+  posts.unshift(post);
+  clearPostForm();
+  renderPostsList();
+  toast('Post logged!', 'success');
+  autoSync();
+}
+
+function clearPostForm() {
+  document.getElementById('post-text').value = '';
+  document.getElementById('post-date').value = today();
+  document.getElementById('post-impressions').value = '';
+  document.getElementById('post-likes').value = '';
+  document.getElementById('post-comments').value = '';
+  document.getElementById('post-saves').value = '';
+  selectedPicId = null;
+  renderPostForm();
+}
+
+function renderPostsList() {
+  const list = document.getElementById('posts-list');
+  const sorted = [...posts].sort((a, b) => new Date(b.date) - new Date(a.date));
+  document.getElementById('post-count').textContent = `${posts.length} post${posts.length !== 1 ? 's' : ''}`;
+  if (!sorted.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">No posts logged yet.</div></div>';
+    return;
+  }
+  list.innerHTML = '';
+  sorted.forEach(post => {
+    const pic = pics.find(p => p.id === post.picId);
+    const item = document.createElement('div');
+    item.className = 'post-item';
+    item.onclick = () => openPostModal(post.id);
+    const thumbHtml = pic
+      ? `<img class="post-thumb" src="${pic.base64}" alt="" />`
+      : `<div class="post-thumb-placeholder">📝</div>`;
+    item.innerHTML = `
+      ${thumbHtml}
+      <div class="post-body">
+        <div class="post-date">${post.date}</div>
+        <div class="post-text">${post.text}</div>
+        <div class="post-stats">
+          <div class="post-stat">❤️ <span class="stat-val">${post.likes}</span></div>
+          <div class="post-stat">💬 <span class="stat-val">${post.comments}</span></div>
+          <div class="post-stat">🔖 <span class="stat-val">${post.saves}</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="post-impressions">${post.impressions.toLocaleString()}</div>
+        <div class="post-impressions-label">impressions</div>
+      </div>`;
+    list.appendChild(item);
+  });
+}
+
+function openPostModal(postId) {
+  const post = posts.find(p => p.id === postId);
+  if (!post) return;
+  currentPostId = postId;
+
+  // Fill fields
+  document.getElementById('edit-post-date').value    = post.date;
+  document.getElementById('edit-post-text').value    = post.text;
+  document.getElementById('edit-impressions').value  = post.impressions;
+  document.getElementById('edit-likes').value        = post.likes;
+  document.getElementById('edit-comments').value     = post.comments;
+  document.getElementById('edit-saves').value        = post.saves;
+
+  // Pic picker
+  const grid = document.getElementById('edit-pic-grid');
+  if (!pics.length) {
+    grid.innerHTML = '<span style="font-family:DM Mono,monospace;font-size:11px;color:#666;">No pics in library</span>';
+  } else {
+    grid.innerHTML = pics.map(pic => `
+      <div onclick="editSelectPic('${pic.id}')" id="epic-${pic.id}" style="width:56px;height:56px;border-radius:6px;overflow:hidden;border:2px solid ${post.picId===pic.id?'#f5c518':'#2a2a2a'};cursor:pointer;flex-shrink:0;position:relative;transition:border-color .15s;">
+        <img src="${pic.base64}" style="width:100%;height:100%;object-fit:cover;display:block;" />
+        ${post.picId===pic.id?'<div style="position:absolute;top:2px;right:2px;background:#f5c518;border-radius:50%;width:14px;height:14px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#000;font-weight:700;">✓</div>':''}
+      </div>`).join('');
+  }
+
+  document.getElementById('modal-delete-btn').onclick = () => deletePost(postId);
+  document.getElementById('post-modal').classList.add('open');
+}
+
+function editSelectPic(picId) {
+  const post = posts.find(p => p.id === currentPostId);
+  if (!post) return;
+  post.picId = post.picId === picId ? null : picId;
+  // Re-render picker
+  pics.forEach(pic => {
+    const el = document.getElementById('epic-' + pic.id);
+    if (!el) return;
+    el.style.borderColor = post.picId === pic.id ? '#f5c518' : '#2a2a2a';
+    el.querySelector('div') && el.querySelector('div').remove();
+    if (post.picId === pic.id) {
+      el.insertAdjacentHTML('beforeend', '<div style="position:absolute;top:2px;right:2px;background:#f5c518;border-radius:50%;width:14px;height:14px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#000;font-weight:700;">✓</div>');
+    }
+  });
+}
+
+function savePostEdit() {
+  const post = posts.find(p => p.id === currentPostId);
+  if (!post) return;
+  post.date        = document.getElementById('edit-post-date').value;
+  post.text        = document.getElementById('edit-post-text').value.trim();
+  post.impressions = parseInt(document.getElementById('edit-impressions').value) || 0;
+  post.likes       = parseInt(document.getElementById('edit-likes').value) || 0;
+  post.comments    = parseInt(document.getElementById('edit-comments').value) || 0;
+  post.saves       = parseInt(document.getElementById('edit-saves').value) || 0;
+  closeModal('post-modal');
+  renderPostsList();
+  toast('Post updated ✓', 'success');
+}
+
+function deletePost(postId) {
+  if (!confirm('Delete this post?')) return;
+  posts = posts.filter(p => p.id !== postId);
+  closeModal('post-modal');
+  renderPostsList();
+  toast('Post deleted', 'info');
+}
+
+// ─── ANALYTICS ────────────────────────────────────────────────────────────────
+function renderAnalytics() {
+  const n = posts.length;
+  document.getElementById('a-total').textContent = n;
+  const avg = arr => n ? Math.round(arr.reduce((a,b)=>a+b,0)/n) : 0;
+  const imps = posts.map(p=>p.impressions);
+  const lks = posts.map(p=>p.likes);
+  const cms = posts.map(p=>p.comments);
+  document.getElementById('a-avg-imp').textContent = avg(imps).toLocaleString();
+  document.getElementById('a-avg-likes').textContent = avg(lks).toLocaleString();
+  document.getElementById('a-avg-comments').textContent = avg(cms).toLocaleString();
+  document.getElementById('a-total-imp').textContent = imps.reduce((a,b)=>a+b,0).toLocaleString();
+  document.getElementById('a-total-likes').textContent = lks.reduce((a,b)=>a+b,0).toLocaleString();
+
+  // Pic usage
+  const usage = document.getElementById('a-pic-usage');
+  const picStats = pics.map(pic => ({ pic, uses: picUses(pic.id) })).filter(x => x.uses > 0).sort((a,b) => b.uses - a.uses);
+  const maxUses = picStats[0]?.uses || 1;
+  if (!picStats.length) { usage.innerHTML = '<div class="empty" style="padding:20px 0;"><div class="empty-text">No pic data yet.</div></div>'; }
+  else {
+    usage.innerHTML = picStats.map(({pic, uses}) => `
+      <div class="pic-usage-row">
+        <img class="pic-usage-thumb" src="${pic.base64}" alt="" />
+        <div class="pic-usage-name">${pic.name}</div>
+        <div class="pic-usage-bar-wrap"><div class="pic-usage-bar" style="width:${Math.round(uses/maxUses*100)}%"></div></div>
+        <div class="pic-usage-count">${uses}</div>
+      </div>`).join('');
+  }
+
+  // Best post
+  const bestBlock = document.getElementById('a-best-post');
+  if (!n) { bestBlock.innerHTML = '<div class="empty" style="padding:20px 0;"><div class="empty-text">No posts yet.</div></div>'; }
+  else {
+    const best = [...posts].sort((a,b) => b.impressions - a.impressions)[0];
+    const bPic = pics.find(p => p.id === best.picId);
+    bestBlock.innerHTML = `
+      <div style="display:flex;gap:12px;align-items:start;margin-bottom:12px;">
+        ${bPic ? `<img style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;" src="${bPic.base64}" />` : '<div style="width:56px;height:56px;border-radius:6px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">📝</div>'}
+        <div>
+          <div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted);margin-bottom:4px;">${best.date}</div>
+          <div style="font-size:13px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${best.text}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <div class="modal-stat" style="padding:10px;"><div class="modal-stat-val yellow" style="font-size:16px;">${best.impressions.toLocaleString()}</div><div class="modal-stat-label">Impr.</div></div>
+        <div class="modal-stat" style="padding:10px;"><div class="modal-stat-val pink" style="font-size:16px;">${best.likes}</div><div class="modal-stat-label">Likes</div></div>
+        <div class="modal-stat" style="padding:10px;"><div class="modal-stat-val purple" style="font-size:16px;">${best.comments}</div><div class="modal-stat-label">Cmts</div></div>
+      </div>`;
+  }
+}
+
+// ─── MODALS ───────────────────────────────────────────────────────────────────
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
+});
+
+// ─── AUTO SYNC ───────────────────────────────────────────────────────────────
+let autoSyncTimer = null;
+function autoSync() {
+  clearTimeout(autoSyncTimer);
+  document.getElementById('sync-status').textContent = 'saving...';
+  autoSyncTimer = setTimeout(() => syncToAppwrite(), 1500);
+}
+
+// ─── APPWRITE SYNC ────────────────────────────────────────────────────────────
+async function appwriteRequest(method, path, body) {
+  const res = await fetch(`${APPWRITE_ENDPOINT}${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Appwrite-Project': PROJECT_ID,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Appwrite error');
+  return data;
+}
+
+
+
+async function syncToAppwrite() {
+  const btn = document.getElementById('sync-btn');
+  const status = document.getElementById('sync-status');
+  btn.classList.add('syncing');
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 1s linear infinite"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Syncing…`;
+  status.textContent = 'syncing…';
+  try {
+    const payload = {
+      pics: JSON.stringify(pics),
+      posts: JSON.stringify(posts),
+    };
+    // Try update first, then create
+    try {
+      await appwriteRequest('PATCH', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/${DOC_ID}`, { data: payload });
+    } catch {
+      await appwriteRequest('POST', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents`, {
+        documentId: DOC_ID,
+        data: payload,
+        permissions: ['read("any")', 'write("any")'],
+      });
+    }
+    const now = new Date().toLocaleTimeString();
+    status.textContent = `synced ${now}`;
+    toast('Synced to Appwrite ✓', 'success');
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'sync failed';
+    toast(`Sync failed: ${err.message}`, 'error');
+  }
+  btn.classList.remove('syncing');
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Save & Sync`;
+}
+
+async function loadFromAppwrite() {
+  try {
+    const doc = await appwriteRequest('GET', `/databases/${DATABASE_ID}/collections/${COLLECTION_ID}/documents/${DOC_ID}`);
+    if (doc.pics) pics = JSON.parse(doc.pics);
+    if (doc.posts) posts = JSON.parse(doc.posts);
+    renderPicGrid();
+    renderPostsList();
+    document.getElementById('sync-status').textContent = 'loaded from cloud';
+    toast('Data loaded from Appwrite ✓', 'success');
+  } catch (e) {
+    // No data yet – that's fine
+    console.log('No existing data:', e.message);
+  }
+}
+
+// ─── SPIN ANIMATION ───────────────────────────────────────────────────────────
+const style = document.createElement('style');
+style.textContent = `@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`;
+document.head.appendChild(style);
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+document.getElementById('post-date').value = today();
+loadFromAppwrite();
+</script>
+</body>
+</html>
