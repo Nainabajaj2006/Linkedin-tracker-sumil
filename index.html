@@ -485,35 +485,18 @@ function showPanel(name) {
 }
 
 // ─── PIC LIBRARY ─────────────────────────────────────────────────────────────
-function compressImage(file, maxW = 800, quality = 0.75) {
-  return new Promise(resolve => {
+function handlePicUpload(e) {
+  const files = Array.from(e.target.files);
+  let loaded = 0;
+  files.forEach(file => {
     const reader = new FileReader();
     reader.onload = ev => {
-      const img = new Image();
-      img.onload = () => {
-        const scale = Math.min(1, maxW / Math.max(img.width, img.height));
-        const canvas = document.createElement('canvas');
-        canvas.width  = Math.round(img.width  * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.src = ev.target.result;
+      pics.push({ id: uid(), name: file.name.replace(/\.[^.]+$/, ''), base64: ev.target.result });
+      loaded++;
+      if (loaded === files.length) { renderPicGrid(); toast(files.length + ' pic(s) added', 'success'); }
     };
     reader.readAsDataURL(file);
   });
-}
-
-async function handlePicUpload(e) {
-  const files = Array.from(e.target.files);
-  if (!files.length) return;
-  toast('Compressing ' + files.length + ' pic(s)...', 'info');
-  for (const file of files) {
-    const base64 = await compressImage(file);
-    pics.push({ id: uid(), name: file.name.replace(/\.[^.]+$/, ''), base64 });
-  }
-  renderPicGrid();
-  toast(files.length + ' pic(s) added & compressed', 'success');
   e.target.value = '';
 }
 
